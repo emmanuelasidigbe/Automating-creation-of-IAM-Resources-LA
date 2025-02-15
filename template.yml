@@ -95,37 +95,43 @@ Resources:
                   - secretsmanager:GetSecretValue
                 Resource: !Sub "arn:aws:secretsmanager:${AWS::Region}:${AWS::AccountId}:secret:TemporaryUserPassword-*"
 
-  # Lambda Function to Log User Credentials
+  # Lambda Function to Log User Credentials (Python)
   LogUserCredentialsFunction:
     Type: AWS::Lambda::Function
     Properties:
       FunctionName: LogUserCredentials
-      Runtime: nodejs18.x
-      Handler: index.handler
+      Runtime: python3.9
+      Handler: index.lambda_handler
       Role: !GetAtt LambdaExecutionRole.Arn
       Code:
         ZipFile: |
-          const AWS = require('aws-sdk');
-          const ssm = new AWS.SSM();
-          const secretsManager = new AWS.SecretsManager();
-          const logger = console;
+          import json
+          import boto3
+          import logging
 
-          exports.handler = async (event) => {
-              try {
-                  const user = event.detail.requestParameters.userName;
-                  const emailParam = `/users/${user}/email`;
-                  
-                  const emailRes = await ssm.getParameter({ Name: emailParam }).promise();
-                  const email = emailRes.Parameter.Value;
-                  
-                  const secretRes = await secretsManager.getSecretValue({ SecretId: 'TemporaryUserPassword' }).promise();
-                  const password = JSON.parse(secretRes.SecretString).password;
-                  
-                  logger.log(`User: ${user}, Email: ${email}, Temporary Password: ${password}`);
-              } catch (error) {
-                  logger.error(`Error processing event: ${error.message}`);
-              }
-          };
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          ssm = boto3.client('ssm')
+          secrets_manager = boto3.client('secretsmanager')
+
+          def lambda_handler(event, context):
+              try:
+                  user = event['detail']['requestParameters']['userName']
+                  email_param = f"/users/{user}/email"
+
+                  # Retrieve user email from Parameter Store
+                  email_res = ssm.get_parameter(Name=email_param)
+                  email = email_res['Parameter']['Value']
+
+                  # Retrieve temporary password from Secrets Manager
+                  secret_res = secrets_manager.get_secret_value(SecretId='TemporaryUserPassword')
+                  password = json.loads(secret_res['SecretString'])['password']
+
+                  logger.info(f"User: {user}, Email: {email}, Temporary Password: {password}")
+
+              except Exception as e:
+                  logger.error(f"Error processing event: {str(e)}")
 
   # EventBridge Rule to Detect IAM User Creation
   UserCreationRule:
