@@ -198,3 +198,4 @@ Outputs:
   LogUserCredentialsFunctionArn:
     Description: ARN of the Lambda function logging user credentials
     Value: !GetAtt LogUserCredentialsFunction.Arn
+##
